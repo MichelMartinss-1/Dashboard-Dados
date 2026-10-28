@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gráfico de Radar — Laboratório de Vendas</title>
+
+<!-- Fonte via Google Fonts CDN (fallback: system-ui) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+
+<style>
+/* ══════════════════════════════════════════
+   TOKENS DE COR — claro / escuro
+══════════════════════════════════════════ */
+:root {
+  --bg:    #EDF0F6;
+  --panel: #FFFFFF;
+  --ink:   #14213D;
+  --mute:  #5B6783;
+  --line:  #D3D9E6;
+  --grid:  #C4CCDD;
+  --acc:   #2E5EAA;
+  box-sizing: border-box;
+  padding-top:    env(safe-area-inset-top,    0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#10172A; --panel:#18213A; --ink:#EEF1F8;
+    --mute:#9BA6C2; --line:#2B3656; --grid:#3A4668; --acc:#7FA6EE;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#10172A; --panel:#18213A; --ink:#EEF1F8;
+  --mute:#9BA6C2; --line:#2B3656; --grid:#3A4668; --acc:#7FA6EE;
+  color-scheme: dark;
+}
+
+/* ══════════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.45;
+}
+
+/* ══════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════ */
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 20px 18px 40px;
+}
+
+h1 {
+  font-size: clamp(26px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  margin: 0 0 4px;
+}
+.sub {
+  color: var(--mute);
+  margin: 0 0 18px;
+  max-width: 70ch;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr) 250px;
+  gap: 14px;
+}
+@media (max-width: 1020px) { .grid { grid-template-columns: 1fr; } }
+
+/* ══════════════════════════════════════════
+   CARDS
+══════════════════════════════════════════ */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+.card h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+.group { margin-bottom: 16px; }
+.group:last-child { margin-bottom: 0; }
+
+/* ══════════════════════════════════════════
+   CONTROLES — botões / chips / select
+══════════════════════════════════════════ */
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+
+button, select { font: inherit; color: inherit; }
+
+/* botão pill */
+.btn {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: border-color .15s, background .15s;
+}
+.btn:hover { border-color: var(--acc); }
+.btn[aria-pressed="true"] { background: var(--acc); border-color: var(--acc); color: #fff; }
+.btn:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; }
+
+/* chip série / eixo */
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: opacity .15s;
+}
+.chip i {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex: none;
+  border: 2px solid var(--c);
+}
+.chip[aria-pressed="true"] i  { background: var(--c); }
+.chip[aria-pressed="false"]   { opacity: .55; }
+.chip.ax i { border-radius: 3px; --c: var(--acc); }
+
+select {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+select:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; }
+
+.toprow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+
+/* ══════════════════════════════════════════
+   RADAR (SVG)
+══════════════════════════════════════════ */
+.stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+svg {
+  width: 100%;
+  height: auto;
+  max-height: 78vh;
+  overflow: visible;
+}
+svg text { font-family: inherit; fill: var(--ink); }
+
+.ring  { fill: none; stroke: var(--grid); stroke-width: 1; }
+.spoke { stroke: var(--grid); stroke-width: 1; }
+.rl    { font-size: 11px; fill: var(--mute); }
+.al    { font-size: 15px; font-weight: 600; }
+
+/* animações / hover */
+.ent { transition: opacity .15s; }
+svg.hl .ent:not(.on) { opacity: .12; }
+.ent polygon {
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+.ent circle {
+  stroke: var(--panel);
+  stroke-width: 2;
+  cursor: pointer;
+}
+.ent.on polygon { stroke-width: 4; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ent, #tip { transition: none; }
+}
+
+/* ══════════════════════════════════════════
+   TOOLTIP
+══════════════════════════════════════════ */
+#tip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity .1s;
+  z-index: 9;
+  max-width: 240px;
+}
+
+/* ══════════════════════════════════════════
+   NOTA / HINT
+══════════════════════════════════════════ */
+.note {
+  color: var(--mute);
+  font-size: 13px;
+  margin: 6px 0 0;
+  text-align: center;
+  max-width: 60ch;
+}
+
+/* ══════════════════════════════════════════
+   TABELA
+══════════════════════════════════════════ */
+.tbl { overflow-x: auto; margin-top: 14px; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+th, td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th:first-child, td:first-child { text-align: left; }
+th   { font-weight: 600; color: var(--mute); }
+td.best { font-weight: 800; color: var(--acc); }
+.dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 7px;
+}
+
+/* ══════════════════════════════════════════
+   DETALHES / ROTEIRO
+══════════════════════════════════════════ */
+details { margin-top: 14px; }
+summary { cursor: pointer; font-weight: 600; }
+summary:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; }
+details ol  { margin: 8px 0 0; padding-left: 20px; color: var(--mute); }
+details li  { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <h1>Gráfico de Radar — Laboratório de Vendas</h1>
+  <p class="sub">50 pedidos de uma empresa fictícia (jan a mai de 2026). Escolha quem comparar, quais indicadores entram e veja como o formato do gráfico muda.</p>
+
+  <!-- ── GRID PRINCIPAL ── -->
+  <div class="grid">
+
+    <!-- Coluna 1: controles -->
+    <aside class="card" aria-label="Controles">
+
+      <div class="group">
+        <h2>Comparar por</h2>
+        <div class="seg" id="dims"></div>
+      </div>
+
+      <div class="group">
+        <h2>Pedidos considerados</h2>
+        <select id="filt">
+          <option value="c">Somente concluídos</option>
+          <option value="cp">Concluídos e pendentes</option>
+          <option value="all">Todos (com cancelados)</option>
+        </select>
+      </div>
+
+      <div class="group">
+        <h2>Escala dos eixos</h2>
+        <div class="seg" id="scale"></div>
+        <p class="note" style="text-align:left" id="scalenote"></p>
+      </div>
+
+      <div class="group">
+        <h2>Exibição</h2>
+        <div class="seg">
+          <button class="btn" id="fill" aria-pressed="true">Preencher áreas</button>
+        </div>
+        <div class="toprow">
+          <button class="btn" id="shuf">Embaralhar eixos</button>
+          <button class="btn" id="rst">Ordem original</button>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Coluna 2: radar -->
+    <main class="card stage">
+      <svg id="radar" viewBox="0 0 700 620"
+           role="img"
+           aria-label="Gráfico de radar comparando os grupos selecionados"></svg>
+      <p class="note" id="hint">
+        Passe o mouse sobre uma área ou ponto para ver o valor real.
+        Quanto mais longe do centro, maior a nota (0 a 100).
+      </p>
+    </main>
+
+    <!-- Coluna 3: séries e eixos -->
+    <aside class="card" aria-label="Séries e eixos">
+      <div class="group">
+        <h2 id="enttitle">Séries</h2>
+        <div id="ents"></div>
+      </div>
+      <div class="group">
+        <h2>Eixos (indicadores)</h2>
+        <div id="axes"></div>
+      </div>
+    </aside>
+
+  </div><!-- /grid -->
+
+  <!-- Tabela de valores reais -->
+  <div class="card tbl" style="margin-top:14px">
+    <h2>Valores reais (o radar mostra só as notas)</h2>
+    <div id="tbl"></div>
+  </div>
+
+  <!-- Roteiro de demonstração -->
+  <details class="card">
+    <summary>Roteiro sugerido para a demonstração</summary>
+    <ol>
+      <li>Comece com "Comparar por: Região" e todos os eixos ligados. Mostre que o Sudeste ocupa a maior área.</li>
+      <li>Desligue um eixo (por exemplo Desconto médio) e mostre que o formato muda: cada eixo é uma variável independente.</li>
+      <li>Clique em "Embaralhar eixos". Os dados são os mesmos, mas a forma muda. Esse é o principal cuidado ao ler um radar.</li>
+      <li>Troque a escala para "Mín–máx" e mostre como as diferenças ficam exageradas quando o pior grupo vai a zero.</li>
+      <li>Mude para Vendedor ou Categoria e compare perfis. Feche com a tabela abaixo, para lembrar que o radar dá o formato e a tabela dá o número.</li>
+    </ol>
+  </details>
+
+</div><!-- /wrap -->
+
+<!-- Tooltip flutuante -->
+<div id="tip"></div>
+
+<!-- ══════════════════════════════════════════
+     DADOS — 50 pedidos fictícios
+     Colunas: [0]ID [1]Data [2]Produto [3]Categoria [4]Segmento
+              [5]Região [6]Vendedor [7]Qtd [8]Desconto
+              [9]Receita [10]Custo [11]Lucro [12]Status
+══════════════════════════════════════════ -->
+<script>
+var D = [
+  ["PED-038","2026-01-02","Impressora Multifuncional","Tecnologia","Média Empresa","Sudeste","Fernanda",4,0.0,5800.0,4031.59,1768.41,"Concluída"],
+  ["PED-017","2026-01-10","Impressora Multifuncional","Tecnologia","Pequena Empresa","Nordeste","Carla",4,0.05,5510.0,3465.71,2044.29,"Concluída"],
+  ["PED-035","2026-01-11","Monitor Profissional","Tecnologia","Média Empresa","Centro-Oeste","Fernanda",3,0.0,5400.0,4186.94,1213.06,"Concluída"],
+  ["PED-032","2026-01-12","Notebook Corporativo","Tecnologia","Média Empresa","Sudeste","Ana",4,0.05,19760.0,13108.72,6651.28,"Concluída"],
+  ["PED-014","2026-01-14","Licença Software Gestão","Serviços","Pequena Empresa","Sul","Bruno",10,0.0,9500.0,3700.42,5799.58,"Pendente"],
+  ["PED-019","2026-01-14","Mesa Executiva","Mobiliário","Média Empresa","Sudeste","Carla",4,0.1,7560.0,5681.2,1878.8,"Concluída"],
+  ["PED-009","2026-01-16","Monitor Profissional","Tecnologia","Média Empresa","Sudeste","Carla",5,0.1,8100.0,6797.42,1302.58,"Concluída"],
+  ["PED-027","2026-01-19","Monitor Profissional","Tecnologia","Pequena Empresa","Sudeste","Carla",6,0.0,10800.0,6831.37,3968.63,"Concluída"],
+  ["PED-039","2026-01-19","Licença Software Gestão","Serviços","Pequena Empresa","Sudeste","Bruno",5,0.1,4275.0,1531.2,2743.8,"Concluída"],
+  ["PED-012","2026-01-30","Monitor Profissional","Tecnologia","Pequena Empresa","Sudeste","Diego",4,0.05,0.0,4592.49,0.0,"Cancelada"],
+  ["PED-007","2026-02-06","Impressora Multifuncional","Tecnologia","Média Empresa","Sudeste","Fernanda",4,0.05,5510.0,3627.51,1882.49,"Concluída"],
+  ["PED-016","2026-02-08","Suporte Técnico Premium","Serviços","Grande Empresa","Sudeste","Bruno",4,0.15,2380.0,1156.11,1223.89,"Concluída"],
+  ["PED-046","2026-02-09","Suporte Técnico Premium","Serviços","Pequena Empresa","Sul","Carla",9,0.15,5355.0,2581.23,2773.77,"Concluída"],
+  ["PED-010","2026-02-11","Licença Software Gestão","Serviços","Média Empresa","Sudeste","Carla",5,0.1,4275.0,1584.79,2690.21,"Concluída"],
+  ["PED-045","2026-02-16","Monitor Profissional","Tecnologia","Média Empresa","Sul","Fernanda",3,0.05,5130.0,4194.45,935.55,"Concluída"],
+  ["PED-034","2026-02-22","Cadeira Ergonômica","Mobiliário","Média Empresa","Nordeste","Carla",5,0.1,7425.0,5268.87,2156.13,"Concluída"],
+  ["PED-005","2026-02-24","Impressora Multifuncional","Tecnologia","Média Empresa","Sudeste","Diego",3,0.15,3697.5,2618.16,1079.34,"Concluída"],
+  ["PED-049","2026-02-24","Licença Software Gestão","Serviços","Pequena Empresa","Sul","Diego",5,0.1,4275.0,1906.61,2368.39,"Concluída"],
+  ["PED-043","2026-03-01","Licença Software Gestão","Serviços","Média Empresa","Sul","Ana",2,0.0,1900.0,699.66,1200.34,"Pendente"],
+  ["PED-022","2026-03-02","Impressora Multifuncional","Tecnologia","Grande Empresa","Nordeste","Carla",1,0.1,1305.0,1079.94,225.06,"Concluída"],
+  ["PED-023","2026-03-02","Suporte Técnico Premium","Serviços","Pequena Empresa","Nordeste","Fernanda",3,0.0,2100.0,623.53,1476.47,"Concluída"],
+  ["PED-013","2026-03-04","Mesa Executiva","Mobiliário","Média Empresa","Sudeste","Diego",2,0.05,3990.0,2515.82,1474.18,"Concluída"],
+  ["PED-018","2026-03-06","Cadeira Ergonômica","Mobiliário","Grande Empresa","Centro-Oeste","Carla",5,0.1,0.0,5154.88,0.0,"Cancelada"],
+  ["PED-002","2026-03-07","Cadeira Ergonômica","Mobiliário","Pequena Empresa","Sudeste","Ana",5,0.0,8250.0,4938.46,3311.54,"Concluída"],
+  ["PED-015","2026-03-07","Monitor Profissional","Tecnologia","Pequena Empresa","Sudeste","Carla",4,0.05,6840.0,4408.34,2431.66,"Concluída"],
+  ["PED-026","2026-03-07","Suporte Técnico Premium","Serviços","Média Empresa","Sudeste","Fernanda",6,0.0,0.0,1423.14,0.0,"Cancelada"],
+  ["PED-036","2026-03-16","Mesa Executiva","Mobiliário","Pequena Empresa","Nordeste","Fernanda",2,0.0,4200.0,2493.13,1706.87,"Concluída"],
+  ["PED-030","2026-03-23","Suporte Técnico Premium","Serviços","Média Empresa","Sudeste","Ana",2,0.1,1260.0,557.58,702.42,"Concluída"],
+  ["PED-033","2026-03-29","Mesa Executiva","Mobiliário","Pequena Empresa","Sudeste","Diego",2,0.05,3990.0,2653.22,1336.78,"Concluída"],
+  ["PED-008","2026-03-30","Licença Software Gestão","Serviços","Média Empresa","Nordeste","Bruno",8,0.15,6460.0,3100.95,3359.05,"Concluída"],
+  ["PED-020","2026-04-04","Cadeira Ergonômica","Mobiliário","Média Empresa","Sudeste","Ana",4,0.15,5610.0,3681.3,1928.7,"Concluída"],
+  ["PED-042","2026-04-06","Notebook Corporativo","Tecnologia","Grande Empresa","Centro-Oeste","Fernanda",4,0.15,17680.0,15149.8,2530.2,"Concluída"],
+  ["PED-040","2026-04-07","Licença Software Gestão","Serviços","Grande Empresa","Centro-Oeste","Fernanda",3,0.05,2707.5,1034.32,1673.18,"Concluída"],
+  ["PED-050","2026-04-07","Licença Software Gestão","Serviços","Média Empresa","Sul","Bruno",1,0.0,950.0,307.38,642.62,"Concluída"],
+  ["PED-024","2026-04-10","Monitor Profissional","Tecnologia","Média Empresa","Sudeste","Diego",3,0.05,5130.0,3227.53,1902.47,"Concluída"],
+  ["PED-028","2026-04-11","Notebook Corporativo","Tecnologia","Grande Empresa","Sudeste","Bruno",5,0.15,22100.0,19349.11,2750.89,"Concluída"],
+  ["PED-006","2026-04-18","Notebook Corporativo","Tecnologia","Pequena Empresa","Sudeste","Diego",2,0.15,8840.0,6584.28,2255.72,"Concluída"],
+  ["PED-044","2026-04-18","Notebook Corporativo","Tecnologia","Pequena Empresa","Nordeste","Fernanda",1,0.0,5200.0,3732.15,1467.85,"Concluída"],
+  ["PED-031","2026-04-26","Notebook Corporativo","Tecnologia","Grande Empresa","Centro-Oeste","Fernanda",1,0.1,4680.0,3236.65,1443.35,"Concluída"],
+  ["PED-037","2026-04-27","Licença Software Gestão","Serviços","Média Empresa","Sul","Bruno",3,0.0,2850.0,1016.09,1833.91,"Concluída"],
+  ["PED-047","2026-04-29","Monitor Profissional","Tecnologia","Grande Empresa","Centro-Oeste","Diego",2,0.1,3240.0,2481.34,758.66,"Concluída"],
+  ["PED-041","2026-05-13","Licença Software Gestão","Serviços","Média Empresa","Sudeste","Bruno",2,0.05,1805.0,785.9,1019.1,"Concluída"],
+  ["PED-011","2026-05-15","Cadeira Ergonômica","Mobiliário","Pequena Empresa","Sudeste","Diego",4,0.15,5610.0,4603.98,1006.02,"Concluída"],
+  ["PED-025","2026-05-15","Mesa Executiva","Mobiliário","Média Empresa","Nordeste","Carla",2,0.0,0.0,2873.75,0.0,"Cancelada"],
+  ["PED-001","2026-05-19","Suporte Técnico Premium","Serviços","Média Empresa","Sudeste","Fernanda",5,0.0,3500.0,1122.64,2377.36,"Concluída"],
+  ["PED-021","2026-05-19","Impressora Multifuncional","Tecnologia","Grande Empresa","Nordeste","Ana",1,0.0,1450.0,865.74,584.26,"Concluída"],
+  ["PED-004","2026-05-21","Notebook Corporativo","Tecnologia","Pequena Empresa","Sul","Diego",5,0.0,26000.0,15486.32,10513.68,"Concluída"],
+  ["PED-029","2026-05-21","Impressora Multifuncional","Tecnologia","Pequena Empresa","Nordeste","Carla",5,0.0,7250.0,5295.18,1954.82,"Concluída"],
+  ["PED-048","2026-05-24","Impressora Multifuncional","Tecnologia","Média Empresa","Nordeste","Diego",4,0.05,5510.0,4125.79,1384.21,"Concluída"],
+  ["PED-003","2026-05-25","Mesa Executiva","Mobiliário","Média Empresa","Centro-Oeste","Ana",4,0.0,8400.0,5710.85,2689.15,"Concluída"]
+];
+
+/* ══════════════════════════════════════════
+   CONFIGURAÇÃO
+══════════════════════════════════════════ */
+var COLORS = ["#2E5EAA","#E4572E","#17A398","#F2A900","#8E44AD","#D81B60","#6D8B2F"];
+
+/* Formatos de exibição */
+var brl = function(v) { return "R$ " + Math.round(v).toLocaleString("pt-BR"); };
+var pct = function(v) { return v.toFixed(1).replace(".", ",") + "%"; };
+var int = function(v) { return Math.round(v).toLocaleString("pt-BR"); };
+var str = function(v) { return String(Math.round(v)); };
+
+/* Soma de uma coluna */
+function sum(rows, col) {
+  return rows.reduce(function(a, x) { return a + x[col]; }, 0);
+}
+
+/* Definição das métricas */
+var METRICS = [
+  { k:"rec", n:"Receita",        f: brl, g: function(r) { return sum(r, 9); } },
+  { k:"luc", n:"Lucro bruto",    f: brl, g: function(r) { return sum(r, 11); } },
+  { k:"mar", n:"Margem",         f: pct, g: function(r) { return sum(r,9) ? sum(r,11)/sum(r,9)*100 : 0; } },
+  { k:"tic", n:"Ticket médio",   f: brl, g: function(r) { return r.length ? sum(r,9)/r.length : 0; } },
+  { k:"qtd", n:"Unidades",       f: int, g: function(r) { return sum(r, 7); } },
+  { k:"ped", n:"Nº de pedidos",  f: str, g: function(r) { return r.length; } },
+  { k:"dsc", n:"Desconto médio", f: pct, g: function(r) { return r.length ? sum(r,8)/r.length*100 : 0; } }
+];
+
+/* Dimensões de agrupamento: nome → índice da coluna nos dados */
+var DIMS = { "Região":5, "Vendedor":6, "Categoria":3, "Segmento":4, "Produto":2 };
+
+/* Estado global */
+var S = {
+  dim:   "Região",
+  filt:  "c",
+  scale: "max",
+  fill:  true,
+  sel:   {},        // objeto usado como Set: { grupo: true }
+  axes:  {},        // { chave: true }
+  order: METRICS.map(function(m) { return m.k; }),
+  hl:    null
+};
+/* inicializa axes com todos */
+METRICS.forEach(function(m) { S.axes[m.k] = true; });
+
+/* Refs DOM */
+var tipEl  = document.getElementById("tip");
+var svgEl  = document.getElementById("radar");
+
+/* Grupos calculados e estatísticas */
+var groups = [];
+var stats  = {};
+
+/* ══════════════════════════════════════════
+   CÁLCULO
+══════════════════════════════════════════ */
+function compute() {
+  var col = DIMS[S.dim];
+  var seen = {}, uniq = [];
+  D.forEach(function(r) { if (!seen[r[col]]) { seen[r[col]] = true; uniq.push(r[col]); } });
+  groups = uniq.sort();
+
+  var ok = S.filt === "c"   ? ["Concluída"]
+         : S.filt === "cp"  ? ["Concluída","Pendente"]
+         :                    ["Concluída","Pendente","Cancelada"];
+
+  var rows = D.filter(function(r) { return ok.indexOf(r[12]) >= 0; });
+
+  stats = {};
+  groups.forEach(function(g) {
+    var rr = rows.filter(function(r) { return r[col] === g; });
+    stats[g] = {};
+    METRICS.forEach(function(m) { stats[g][m.k] = m.g(rr); });
+  });
+}
+
+function score(g, k) {
+  var vals = groups.map(function(x) { return stats[x][k]; });
+  var mx   = Math.max.apply(null, vals);
+  var mn   = Math.min.apply(null, vals);
+  var x    = stats[g][k];
+  if (S.scale === "max") return mx ? x / mx * 100 : 0;
+  return mx === mn ? 50 : (x - mn) / (mx - mn) * 100;
+}
+
+function resetSel() {
+  var byRec = groups.slice().sort(function(a,b) { return stats[b].rec - stats[a].rec; });
+  var take  = groups.length > 5 ? 3 : groups.length;
+  S.sel = {};
+  byRec.slice(0, take).forEach(function(g) { S.sel[g] = true; });
+}
+
+function color(g) { return COLORS[groups.indexOf(g) % COLORS.length]; }
+
+/* ══════════════════════════════════════════
+   CONTROLES
+══════════════════════════════════════════ */
+function controls() {
+  /* dimensões */
+  document.getElementById("dims").innerHTML = Object.keys(DIMS).map(function(d) {
+    return '<button class="btn" data-d="' + d + '" aria-pressed="' + (d === S.dim) + '">' + d + '</button>';
+  }).join("");
+
+  /* escala */
+  document.getElementById("scale").innerHTML = [
+    ["max","Relativa ao maior"],
+    ["mm","Mín–máx"]
+  ].map(function(pair) {
+    return '<button class="btn" data-s="' + pair[0] + '" aria-pressed="' + (S.scale === pair[0]) + '">' + pair[1] + '</button>';
+  }).join("");
+
+  document.getElementById("scalenote").textContent = S.scale === "max"
+    ? "Maior valor do eixo = 100. Os demais são proporções dele."
+    : "Menor valor = 0 e maior = 100. Realça diferenças pequenas.";
+
+  /* título séries */
+  var titles = { "Região":"Regiões","Vendedor":"Vendedores","Categoria":"Categorias","Segmento":"Segmentos","Produto":"Produtos" };
+  document.getElementById("enttitle").textContent = titles[S.dim] || "Séries";
+
+  /* chips de séries */
+  document.getElementById("ents").innerHTML = groups.map(function(g) {
+    return '<button class="chip" data-g="' + g + '" style="--c:' + color(g) + '" aria-pressed="' + (!!S.sel[g]) + '"><i></i>' + g + '</button>';
+  }).join("");
+
+  /* chips de eixos */
+  document.getElementById("axes").innerHTML = METRICS.map(function(m) {
+    return '<button class="chip ax" data-a="' + m.k + '" aria-pressed="' + (!!S.axes[m.k]) + '"><i></i>' + m.n + '</button>';
+  }).join("");
+
+  document.getElementById("fill").setAttribute("aria-pressed", String(S.fill));
+}
+
+/* ══════════════════════════════════════════
+   RENDER SVG + TABELA
+══════════════════════════════════════════ */
+function render() {
+  /* eixos ativos na ordem atual */
+  var ax = S.order
+    .filter(function(k) { return S.axes[k]; })
+    .map(function(k) { return METRICS.filter(function(m) { return m.k === k; })[0]; });
+
+  var n = ax.length, cx = 350, cy = 310, R = 220;
+
+  /* coordenadas polares → cartesianas */
+  function pt(i, p) {
+    var a = (-90 + i * 360 / n) * Math.PI / 180;
+    return [cx + R * p / 100 * Math.cos(a), cy + R * p / 100 * Math.sin(a)];
+  }
+
+  var h = "";
+
+  /* anéis de referência */
+  [20,40,60,80,100].forEach(function(p) {
+    var pts = ax.map(function(_, i) { return pt(i, p).join(","); }).join(" ");
+    h += '<polygon class="ring" points="' + pts + '"/>';
+    h += '<text class="rl" x="' + (cx + 5) + '" y="' + (cy - R * p / 100 - 3) + '">' + p + '</text>';
+  });
+
+  /* raios e labels */
+  ax.forEach(function(m, i) {
+    var xy  = pt(i, 100);
+    var lxy = pt(i, 112);
+    var cosA = Math.cos((-90 + i * 360 / n) * Math.PI / 180);
+    var anchor = cosA > 0.25 ? "start" : cosA < -0.25 ? "end" : "middle";
+    h += '<line class="spoke" x1="' + cx + '" y1="' + cy + '" x2="' + xy[0] + '" y2="' + xy[1] + '"/>';
+    h += '<text class="al" x="' + lxy[0] + '" y="' + (lxy[1] + 5) + '" text-anchor="' + anchor + '">' + m.n + '</text>';
+  });
+
+  /* polígonos das séries */
+  var selArr = Object.keys(S.sel).filter(function(g) { return S.sel[g]; });
+  selArr.forEach(function(g) {
+    var c   = color(g);
+    var pts = ax.map(function(m, i) { return pt(i, score(g, m.k)); });
+    var poly = pts.map(function(p) { return p.join(","); }).join(" ");
+    h += '<g class="ent ' + (S.hl === g ? "on" : "") + '" data-g="' + g + '">';
+    h += '<polygon points="' + poly + '" fill="' + c + '" fill-opacity="' + (S.fill ? .18 : 0) + '" stroke="' + c + '"/>';
+    ax.forEach(function(m, i) {
+      var tooltip = g + " · " + m.n + ": " + m.f(stats[g][m.k]) + " (nota " + score(g, m.k).toFixed(0) + ")";
+      h += '<circle cx="' + pts[i][0] + '" cy="' + pts[i][1] + '" r="6" fill="' + c + '" data-t="' + tooltip + '"/>';
+    });
+    h += "</g>";
+  });
+
+  svgEl.innerHTML = h;
+  svgEl.classList.toggle("hl", !!S.hl);
+
+  /* tabela */
+  var best = {};
+  ax.forEach(function(m) {
+    best[m.k] = Math.max.apply(null, selArr.map(function(g) { return stats[g][m.k]; }));
+  });
+
+  if (selArr.length) {
+    var thead = "<tr><th>" + S.dim + "</th>" + ax.map(function(m) { return "<th>" + m.n + "</th>"; }).join("") + "</tr>";
+    var tbody = selArr.map(function(g) {
+      return "<tr><td><span class='dot' style='background:" + color(g) + "'></span>" + g + "</td>"
+        + ax.map(function(m) {
+            var cls = selArr.length > 1 && stats[g][m.k] === best[m.k] ? " class='best'" : "";
+            return "<td" + cls + ">" + m.f(stats[g][m.k]) + "</td>";
+          }).join("")
+        + "</tr>";
+    }).join("");
+    document.getElementById("tbl").innerHTML = "<table><thead>" + thead + "</thead><tbody>" + tbody + "</tbody></table>";
+  } else {
+    document.getElementById("tbl").innerHTML = "<p class='note' style='text-align:left'>Selecione ao menos uma série para ver a tabela.</p>";
+  }
+
+  /* hint */
+  document.getElementById("hint").textContent = selArr.length
+    ? "Passe o mouse sobre uma área ou ponto para ver o valor real. Quanto mais longe do centro, maior a nota (0 a 100)."
+    : "Nenhuma série selecionada. Clique em um item da lista à direita.";
+}
+
+function all() { compute(); controls(); render(); }
+
+/* ══════════════════════════════════════════
+   EVENTOS
+══════════════════════════════════════════ */
+document.addEventListener("click", function(e) {
+  var b = e.target.closest ? e.target.closest("button,.chip") : null;
+  if (!b) return;
+
+  if (b.dataset.d) {
+    S.dim = b.dataset.d;
+    compute(); resetSel(); S.hl = null;
+    controls(); render();
+
+  } else if (b.dataset.s) {
+    S.scale = b.dataset.s;
+    controls(); render();
+
+  } else if (b.dataset.g) {
+    if (S.sel[b.dataset.g]) { delete S.sel[b.dataset.g]; }
+    else                     { S.sel[b.dataset.g] = true; }
+    controls(); render();
+
+  } else if (b.dataset.a) {
+    var k = b.dataset.a;
+    var activeCount = Object.keys(S.axes).filter(function(x) { return S.axes[x]; }).length;
+    if (S.axes[k]) {
+      if (activeCount <= 3) { flash("O radar precisa de pelo menos 3 eixos."); return; }
+      delete S.axes[k];
+    } else {
+      S.axes[k] = true;
+    }
+    controls(); render();
+
+  } else if (b.id === "fill") {
+    S.fill = !S.fill;
+    controls(); render();
+
+  } else if (b.id === "shuf") {
+    for (var i = S.order.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = S.order[i]; S.order[i] = S.order[j]; S.order[j] = tmp;
+    }
+    render();
+
+  } else if (b.id === "rst") {
+    S.order = METRICS.map(function(m) { return m.k; });
+    render();
+  }
+});
+
+document.getElementById("filt").addEventListener("change", function(e) {
+  S.filt = e.target.value;
+  compute(); controls(); render();
+});
+
+function flash(t) { document.getElementById("hint").textContent = t; }
+
+/* tooltip hover */
+svgEl.addEventListener("mouseover", function(e) {
+  var g = e.target.closest ? e.target.closest(".ent") : null;
+  var t = e.target.dataset && e.target.dataset.t;
+  if (g && S.hl !== g.dataset.g) {
+    S.hl = g.dataset.g;
+    svgEl.classList.add("hl");
+    svgEl.querySelectorAll(".ent").forEach(function(x) {
+      x.classList.toggle("on", x.dataset.g === S.hl);
+    });
+  }
+  if (t) { tipEl.textContent = t; tipEl.style.opacity = 1; }
+});
+
+svgEl.addEventListener("mousemove", function(e) {
+  tipEl.style.left = Math.min(e.clientX + 14, window.innerWidth - 250) + "px";
+  tipEl.style.top  = (e.clientY + 14) + "px";
+});
+
+svgEl.addEventListener("mouseout", function(e) {
+  var stillInside = svgEl.contains(e.relatedTarget) && e.relatedTarget && e.relatedTarget.closest(".ent");
+  if (!stillInside) {
+    S.hl = null;
+    svgEl.classList.remove("hl");
+    svgEl.querySelectorAll(".ent").forEach(function(x) { x.classList.remove("on"); });
+  }
+  tipEl.style.opacity = 0;
+});
+
+/* ── INICIALIZAÇÃO ── */
+compute();
+resetSel();
+controls();
+render();
+</script>
+</body>
+</html>
